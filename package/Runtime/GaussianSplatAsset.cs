@@ -10,10 +10,10 @@ namespace GaussianSplatting.Runtime
 {
     public class GaussianSplatAsset : ScriptableObject
     {
-        public const int kCurrentVersion = 2023_10_20;
+        public const int kCurrentVersion = 20231110;
         public const int kChunkSize = 256;
         public const int kTextureWidth = 2048; // allows up to 32M splats on desktop GPU (2k width x 16k height)
-        public const int kMaxSplats = 8_600_000; // mostly due to 2GB GPU buffer size limit when exporting a splat (2GB / 248B is just over 8.6M)
+        public const int kMaxSplats = 8600000; // mostly due to 2GB GPU buffer size limit when exporting a splat (2GB / 248B is just over 8.6M)
 
         [SerializeField] int m_FormatVersion;
         [SerializeField] int m_SplatCount;
@@ -129,6 +129,7 @@ namespace GaussianSplatting.Runtime
 
         public static int GetOtherSizeNoSHIndex(VectorFormat scaleFormat)
         {
+            // 4 means rotation data size(in quaternion)
             return 4 + GetVectorSize(scaleFormat);
         }
 
@@ -181,8 +182,15 @@ namespace GaussianSplatting.Runtime
         }
         public static long CalcColorDataSize(int splatCount, ColorFormat formatColor)
         {
-            var (width, height) = CalcTextureSize(splatCount);
-            return width * height * GetColorSize(formatColor);
+            if (formatColor == ColorFormat.Float32x4)
+            {
+                return splatCount * GetColorSize(formatColor);
+            }
+            else
+            {
+                var (width, height) = CalcTextureSize(splatCount);
+                return width * height * GetColorSize(formatColor);
+            }
         }
         public static long CalcSHDataSize(int splatCount, SHFormat formatSh)
         {

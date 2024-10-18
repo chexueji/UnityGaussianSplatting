@@ -21,6 +21,7 @@ float3 Dot7(int vidx, float3 v[SH_MAX_COEFFS_COUNT], float f[7])
     return v[vidx+0] * f[0] + v[vidx+1] * f[1] + v[vidx+2] * f[2] + v[vidx+3] * f[3] + v[vidx+4] * f[4] + v[vidx+5] * f[5] + v[vidx+6] * f[6];
 }
 
+// Note: param: n >= 1 && n <= 8
 void RotateSH(float3x3 orient, int n, float3 coeffsIn[SH_MAX_COEFFS_COUNT], out float3 coeffs[SH_MAX_COEFFS_COUNT])
 {
     const float kSqrt03_02    = sqrt( 3.0 /  2.0);
@@ -67,7 +68,7 @@ void RotateSH(float3x3 orient, int n, float3 coeffsIn[SH_MAX_COEFFS_COUNT], out 
     int dstIdx = 0;
 
     // band 0
-    coeffs[dstIdx++] = coeffsIn[0];
+    coeffs[dstIdx++] = coeffsIn[srcIdx];
     if (n < 2)
         return;
 

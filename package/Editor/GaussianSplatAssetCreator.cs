@@ -662,12 +662,6 @@ namespace GaussianSplatting.Editor
                     chunkMaxshs = math.max(chunkMaxshs, s.shF);
                 }
 
-                // make sure bounds are not zero
-                chunkMaxpos = math.max(chunkMaxpos, chunkMinpos + 1.0e-5f);
-                chunkMaxscl = math.max(chunkMaxscl, chunkMinscl + 1.0e-5f);
-                chunkMaxcol = math.max(chunkMaxcol, chunkMincol + 1.0e-5f);
-                chunkMaxshs = math.max(chunkMaxshs, chunkMinshs + 1.0e-5f);
-
                 // store chunk info
                 GaussianSplatAsset.ChunkInfo info = default;
                 info.posX = new float2(chunkMinpos.x, chunkMaxpos.x);
@@ -733,7 +727,7 @@ namespace GaussianSplatting.Editor
         }
 
         [BurstCompile]
-        struct ConvertColorJob : IJobParallelFor
+        struct ConvertTexColorJob : IJobParallelFor
         {
             public int width, height;
             [ReadOnly] public NativeArray<float4> inputData;
@@ -773,6 +767,30 @@ namespace GaussianSplatting.Editor
 
                     srcIdx++;
                     dstPtr += formatBytesPerPixel;
+                }
+            }
+        }
+
+        [BurstCompile]
+        struct ConvertColorJob : IJobParallelFor
+        {
+            [ReadOnly] public NativeArray<float4> inputData;
+            [NativeDisableParallelForRestriction] public NativeArray<byte> outputData;
+            public GaussianSplatAsset.ColorFormat format;
+            public int formatSize;
+
+            public unsafe void Execute(int index)
+            {
+                byte* dstPtr = (byte*)outputData.GetUnsafePtr() + index * formatSize;
+
+                float4 color = inputData[index];
+                switch (format)
+                {
+                    case GaussianSplatAsset.ColorFormat.Float32x4:
+                        {
+                            *(float4*)dstPtr = color;
+                        }
+                        break;
                 }
             }
         }
@@ -946,7 +964,7 @@ namespace GaussianSplatting.Editor
         }
 
         [BurstCompile]
-        struct CreateColorDataJob : IJobParallelFor
+        struct CreateTexColorDataJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<InputSplatData> m_Input;
             [NativeDisableParallelForRestriction] public NativeArray<float4> m_Output;
@@ -959,51 +977,91 @@ namespace GaussianSplatting.Editor
             }
         }
 
+        struct CreateColorDataJob : IJobParallelFor
+        {
+            [ReadOnly] public NativeArray<InputSplatData> m_Input;
+            [NativeDisableParallelForRestriction] public NativeArray<float4> m_Output;
+
+            public void Execute(int index)
+            {
+                var splat = m_Input[index];
+                m_Output[index] = new float4(splat.dc0.x, splat.dc0.y, splat.dc0.z, splat.opacity);
+            }
+        }
+
         void CreateColorData(NativeArray<InputSplatData> inputSplats, string filePath, ref Hash128 dataHash)
         {
-            var (width, height) = GaussianSplatAsset.CalcTextureSize(inputSplats.Length);
-            NativeArray<float4> data = new(width * height, Allocator.TempJob);
-
-            CreateColorDataJob job = new CreateColorDataJob();
-            job.m_Input = inputSplats;
-            job.m_Output = data;
-            job.Schedule(inputSplats.Length, 8192).Complete();
-
-            dataHash.Append(data);
-            dataHash.Append((int)m_FormatColor);
-
-            GraphicsFormat gfxFormat = GaussianSplatAsset.ColorFormatToGraphics(m_FormatColor);
-            int dstSize = (int)GraphicsFormatUtility.ComputeMipmapSize(width, height, gfxFormat);
-
-            if (GraphicsFormatUtility.IsCompressedFormat(gfxFormat))
+            if (m_FormatColor == GaussianSplatAsset.ColorFormat.Float32x4)
             {
-                Texture2D tex = new Texture2D(width, height, GraphicsFormat.R32G32B32A32_SFloat, TextureCreationFlags.DontInitializePixels | TextureCreationFlags.DontUploadUponCreate);
-                tex.SetPixelData(data, 0);
-                EditorUtility.CompressTexture(tex, GraphicsFormatUtility.GetTextureFormat(gfxFormat), 100);
-                NativeArray<byte> cmpData = tex.GetPixelData<byte>(0);
-                using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-                fs.Write(cmpData);
+                NativeArray<float4> data = new(inputSplats.Length, Allocator.TempJob);
+                CreateColorDataJob job = new CreateColorDataJob();
+                job.m_Input = inputSplats;
+                job.m_Output = data;
+                job.Schedule(inputSplats.Length, 8192).Complete();
 
-                DestroyImmediate(tex);
-            }
-            else
-            {
+                dataHash.Append(data);
+                dataHash.Append((int)m_FormatColor);
+                int dstSize = UnsafeUtility.SizeOf<float4>() * inputSplats.Length;
                 ConvertColorJob jobConvert = new ConvertColorJob
                 {
-                    width = width,
-                    height = height,
                     inputData = data,
                     format = m_FormatColor,
+                    formatSize = UnsafeUtility.SizeOf<float4>(),
                     outputData = new NativeArray<byte>(dstSize, Allocator.TempJob),
-                    formatBytesPerPixel = dstSize / width / height
                 };
-                jobConvert.Schedule(height, 1).Complete();
+                jobConvert.Schedule(inputSplats.Length, 8192).Complete();
                 using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
                 fs.Write(jobConvert.outputData);
                 jobConvert.outputData.Dispose();
-            }
 
-            data.Dispose();
+                data.Dispose();
+            }
+            else
+            {
+                var (width, height) = GaussianSplatAsset.CalcTextureSize(inputSplats.Length);
+                NativeArray<float4> data = new(width * height, Allocator.TempJob);
+
+                CreateTexColorDataJob job = new CreateTexColorDataJob();
+                job.m_Input = inputSplats;
+                job.m_Output = data;
+                job.Schedule(inputSplats.Length, 8192).Complete();
+
+                dataHash.Append(data);
+                dataHash.Append((int)m_FormatColor);
+
+                GraphicsFormat gfxFormat = GaussianSplatAsset.ColorFormatToGraphics(m_FormatColor);
+                int dstSize = (int)GraphicsFormatUtility.ComputeMipmapSize(width, height, gfxFormat);
+
+                if (GraphicsFormatUtility.IsCompressedFormat(gfxFormat))
+                {
+                    Texture2D tex = new Texture2D(width, height, GraphicsFormat.R32G32B32A32_SFloat, TextureCreationFlags.DontInitializePixels | TextureCreationFlags.DontUploadUponCreate);
+                    tex.SetPixelData(data, 0);
+                    EditorUtility.CompressTexture(tex, GraphicsFormatUtility.GetTextureFormat(gfxFormat), 100);
+                    NativeArray<byte> cmpData = tex.GetPixelData<byte>(0);
+                    using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+                    fs.Write(cmpData);
+
+                    DestroyImmediate(tex);
+                }
+                else
+                {
+                    ConvertTexColorJob jobConvert = new ConvertTexColorJob
+                    {
+                        width = width,
+                        height = height,
+                        inputData = data,
+                        format = m_FormatColor,
+                        outputData = new NativeArray<byte>(dstSize, Allocator.TempJob),
+                        formatBytesPerPixel = dstSize / width / height
+                    };
+                    jobConvert.Schedule(height, 1).Complete();
+                    using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+                    fs.Write(jobConvert.outputData);
+                    jobConvert.outputData.Dispose();
+                }
+
+                data.Dispose();
+            }
         }
 
         [BurstCompile]

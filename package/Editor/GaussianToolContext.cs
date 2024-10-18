@@ -11,7 +11,7 @@ namespace GaussianSplatting.Editor
     [EditorToolContext("GaussianSplats", typeof(GaussianSplatRenderer)), Icon(k_IconPath)]
     class GaussianToolContext : EditorToolContext
     {
-        const string k_IconPath = "Packages/org.nesnausk.gaussian-splatting/Editor/Icons/GaussianContext.png";
+        const string k_IconPath = "Packages/gaussian-splatting/Editor/Icons/GaussianContext.png";
 
         Vector2 m_MouseStartDragPos;
 
@@ -19,10 +19,10 @@ namespace GaussianSplatting.Editor
         {
             if (tool == Tool.Move)
                 return typeof(GaussianMoveTool);
-            //if (tool == Tool.Rotate)
-            //    return typeof(GaussianRotateTool); // not correctly working yet
-            //if (tool == Tool.Scale)
-            //    return typeof(GaussianScaleTool); // not working correctly yet when the GS itself has scale
+            if (tool == Tool.Rotate)
+                return typeof(GaussianRotateTool); // not correctly working yet
+            if (tool == Tool.Scale)
+                return typeof(GaussianScaleTool);
             return null;
         }
 
@@ -75,6 +75,16 @@ namespace GaussianSplatting.Editor
                     }
                     evt.Use();
                     break;
+
+                case "Duplicate":
+                    if (execute)
+                    {
+                        gs.EditDuplicateSelection();
+                        GaussianSplatRendererEditor.RepaintAll();
+                    }
+                    evt.Use();
+                    break;
+                    
             }
         }
 
@@ -108,8 +118,7 @@ namespace GaussianSplatting.Editor
                         break;
                     if (HandleUtility.nearestControl == id && evt.button == 0)
                     {
-                        // shift/command adds to selection, ctrl removes from selection: if none of these
-                        // are present, start a new selection
+                        // shift/command adds to selection, ctrl removes from selection
                         if (!evt.shift && !EditorGUI.actionKey && !evt.control)
                             gs.EditDeselectAll();
 

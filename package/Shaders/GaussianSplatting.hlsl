@@ -10,15 +10,41 @@ float InvSquareCentered01(float x)
     return x + 0.5;
 }
 
-float3 QuatRotateVector(float3 v, float4 r)
+// reference: https://github.com/mrdoob/three.js/blob/master/src/math/Vector3.js
+float3 QuatRotateVector(float3 v, float4 q)
 {
-    float3 t = 2 * cross(r.xyz, v);
-    return v + r.w * t + cross(r.xyz, t);
-}
+    q = normalize(q); // normalize
+    float3 t = 2 * cross(q.xyz, v);
+    return v + q.w * t + cross(q.xyz, t);
 
+    // float vx = v.x, vy = v.y, vz = v.z;
+    // float qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+
+    // // t = 2 * cross( q.xyz, v );
+    // float tx = 2 * ( qy * vz - qz * vy );
+    // float ty = 2 * ( qz * vx - qx * vz );
+    // float tz = 2 * ( qx * vy - qy * vx );
+
+    // float3 res;
+    // // v + q.w * t + cross( q.xyz, t );
+    // res.x = vx + qw * tx + qy * tz - qz * ty;
+    // res.y = vy + qw * ty + qz * tx - qx * tz;
+    // res.z = vz + qw * tz + qx * ty - qy * tx;
+    // return res;
+}
+ // reference: https://github.com/mrdoob/three.js/blob/master/src/math/Quaternion.js
 float4 QuatMul(float4 a, float4 b)
 {
     return float4(a.wwww * b + (a.xyzx * b.wwwx + a.yzxy * b.zxyy) * float4(1,1,1,-1) - a.zxyz * b.yzxz);
+    // float4 res;
+    // float qax = a.x, qay = a.y, qaz = a.z, qaw = a.w;
+    // float qbx = b.x, qby = b.y, qbz = b.z, qbw = b.w;
+
+    // res.x = qax * qbw + qaw * qbx + qay * qbz - qaz * qby;
+    // res.y = qay * qbw + qaw * qby + qaz * qbx - qax * qbz;
+    // res.z = qaz * qbw + qaw * qbz + qax * qby - qay * qbx;
+    // res.w = qaw * qbw - qax * qbx - qay * qby - qaz * qbz;
+    // return res;
 }
 
 float4 QuatInverse(float4 q)
@@ -136,7 +162,7 @@ struct SplatSHData
     half3 col, sh1, sh2, sh3, sh4, sh5, sh6, sh7, sh8, sh9, sh10, sh11, sh12, sh13, sh14, sh15;
 };
 
-half3 ShadeSH(SplatSHData splat, half3 dir, int shOrder, bool onlySH)
+half3 ShadeSH(SplatSHData splat, half3 dir, int shOrder)
 {
     dir *= -1;
 
@@ -144,8 +170,6 @@ half3 ShadeSH(SplatSHData splat, half3 dir, int shOrder, bool onlySH)
 
     // ambient band
     half3 res = splat.col; // col = sh0 * SH_C0 + 0.5 is already precomputed
-    if (onlySH)
-        res = 0.5;
     // 1st degree
     if (shOrder >= 1)
     {
@@ -313,7 +337,20 @@ uint EncodeQuatToNorm10(float4 v) // 32 bits: 10.10.10.2
 SplatBufferDataType _SplatPos;
 SplatBufferDataType _SplatOther;
 SplatBufferDataType _SplatSH;
-Texture2D _SplatColor;
+SplatBufferDataType _SplatColor;
+
+struct SHTableItemFloat32
+{
+    float3 sh1, sh2, sh3, sh4, sh5, sh6, sh7, sh8, sh9, sh10, sh11, sh12, sh13, sh14, sh15;
+    float3 shPadding; // pad to multiple of 16 bytes
+};
+
+AppendStructuredBuffer<float3> _SplatDuplicatedPos;
+AppendStructuredBuffer<float4> _SplatDuplicatedOther;
+AppendStructuredBuffer<SHTableItemFloat32> _SplatDuplicatedSH;
+AppendStructuredBuffer<float4> _SplatDuplicatedColor;
+
+Texture2D _SplatTexColor;
 uint _SplatFormat;
 
 // Match GaussianSplatAsset.VectorFormat
@@ -321,6 +358,11 @@ uint _SplatFormat;
 #define VECTOR_FMT_16 1
 #define VECTOR_FMT_11 2
 #define VECTOR_FMT_6 3
+
+#define COLOR_FMT_32x4F 0
+#define COLOR_FMT_16x4F 1
+#define COLOR_FMT_Norm8x4 2
+#define COLOR_FMT_BC7 3
 
 uint LoadUShort(SplatBufferDataType dataBuffer, uint addrU)
 {
@@ -422,7 +464,7 @@ float3 LoadSplatPos(uint idx)
 
 half4 LoadSplatColTex(uint3 coord)
 {
-    return _SplatColor.Load(coord);
+    return _SplatTexColor.Load(coord);
 }
 
 SplatData LoadSplatData(uint idx)
@@ -434,6 +476,7 @@ SplatData LoadSplatData(uint idx)
 
     uint scaleFmt = (_SplatFormat >> 8) & 0xFF;
     uint shFormat = (_SplatFormat >> 16) & 0xFF;
+    uint colorFormat = (_SplatFormat >> 24) & 0xFF;
 
     uint otherStride = 4; // rotation is 10.10.10.2
     if (scaleFmt == VECTOR_FMT_32F)
@@ -463,7 +506,13 @@ SplatData LoadSplatData(uint idx)
     s.pos       = LoadSplatPosValue(idx);
     s.rot       = DecodeRotation(DecodePacked_10_10_10_2(LoadUInt(_SplatOther, otherAddr)));
     s.scale     = LoadAndDecodeVector(_SplatOther, otherAddr + 4, scaleFmt);
-    half4 col   = LoadSplatColTex(coord);
+    half4 col = half4(0.0, 0.0, 0.0, 0.0);
+    if (colorFormat == COLOR_FMT_32x4F) {
+        int stride = 16;
+        col = half4(asfloat(_SplatColor.Load4(idx * stride)));
+    } else {
+        col = LoadSplatColTex(coord);
+    }
 
     uint shIndex = idx;
     if (shFormat > VECTOR_FMT_6)

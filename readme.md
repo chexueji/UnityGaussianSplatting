@@ -1,30 +1,26 @@
 # Gaussian Splatting playground in Unity
 
-SIGGRAPH 2023 had a paper "[**3D Gaussian Splatting for Real-Time Radiance Field Rendering**](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/)" by Kerbl, Kopanas, Leimkühler, Drettakis
-that is really cool! Check out their website, source code repository, data sets and so on. I've decided to try to implement the realtime visualization part (i.e. the one that takes already-produced
-gaussian splat "model" file) in Unity.
+SIGGRAPH 2023 had a paper "[**3D Gaussian Splatting for Real-Time Radiance Field Rendering**](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/)" by Kerbl, Kopanas, Leimkühler, Drettakis that looks pretty cool!
+Check out their website, source code repository, data sets and so on.
+
+I've decided to try to implement the realtime visualization part (i.e. the one that takes already-produced gaussian splat "model" file) in Unity.
 
 ![Screenshot](/docs/Images/shotOverview.jpg?raw=true "Screenshot")
 
-Everything in this repository is based on that "OG" gaussian splatting paper. Towards end of 2023, there's a ton of
-[new gaussian splatting research](https://github.com/MrNeRF/awesome-3D-gaussian-splatting) coming out; _none_ of that is in this project.
+The original paper code has a purely CUDA-based realtime renderer; other
+people have done their own implementations (e.g. WebGPU at [cvlab-epfl](https://github.com/cvlab-epfl/gaussian-splatting-web), Taichi at [wanmeihuali](https://github.com/wanmeihuali/taichi_3d_gaussian_splatting), etc.).
 
-:warning: Status as of 2023 December: I'm not planning any significant further developments.
-
-:warning: The only platforms where this is known to work are "PC" (Windows, Mac, Linux) when using either D3D12, Metal or Vulkan graphics APIs.
-Anything else may or migth not work. There are known issues specifically with:
-- Anything related to virtual reality (VR, AR, XR, MR): [#17](https://github.com/aras-p/UnityGaussianSplatting/issues/17)
-- Anything using OpenGL or OpenGL ES: [#26](https://github.com/aras-p/UnityGaussianSplatting/issues/26)
-- WebGPU might work someday, but seems that today it does not quite have all the required graphics features yet: [#65](https://github.com/aras-p/UnityGaussianSplatting/issues/65)
-- Mobile may or might not work. Some iOS devices definitely do not work ([#72](https://github.com/aras-p/UnityGaussianSplatting/issues/72)),
-  some Androids do not work either ([#112](https://github.com/aras-p/UnityGaussianSplatting/issues/112))
+Code in here so far is randomly cribbled together from reading the paper (as well as earlier literature on EWA splatting), looking at the official CUDA implementation, and so on. Current state:
+- The code does **not** use the "tile-based splat rasterizer" bit from the paper; it just draws each gaussian splat as an oriented quad that covers the extents of it.
+- Splat color accumulation is done by rendering front-to-back, with a blending mode that results in the same accumulated color as their tile-based renderer.
+- Splat sorting is done with a AMD FidelityFX derived radix sort.
 
 ## Usage
 
-Download or clone this repository, open `projects/GaussianExample` as a Unity project (I use Unity 2022.3, other versions might also work),
-and open `GSTestScene` scene in there.
+:warning: Note: this is all _**a toy**_ that I'm just playing around with. If you file bugs or feature requests, I will most likely just ignore them and do whatever I please. I told you so! :warning:
 
-Note that the project requires DX12 or Vulkan on Windows, i.e. **DX11 will not work**. This is **not tested at all on mobile/web**, and probably
+Download or clone this repository and open `projects/GaussianExample` as a Unity project (I use Unity 2022.3, other versions might also work).
+Note that the project requires DX12 or Vulkan on Windows, i.e. DX11 will not work. This is **not tested at all on mobile/web**, and probably
 does not work there.
 
 <img align="right" src="docs/Images/shotAssetCreator.png" width="250px">
@@ -59,6 +55,9 @@ Additional documentation:
 
 _That's it!_
 
+Future plans, roadmap and a todo list does not really exist, I'll just do whatever I randomly decide. I keep some of the open ideas as github issues.
+
+
 
 ## Write-ups
 
@@ -66,7 +65,6 @@ My own blog posts about all this:
 * [Gaussian Splatting is pretty cool!](https://aras-p.info/blog/2023/09/05/Gaussian-Splatting-is-pretty-cool/) (2023 Sep 5)
 * [Making Gaussian Splats smaller](https://aras-p.info/blog/2023/09/13/Making-Gaussian-Splats-smaller/) (2023 Sep 13)
 * [Making Gaussian Splats more smaller](https://aras-p.info/blog/2023/09/27/Making-Gaussian-Splats-more-smaller/) (2023 Sep 27)
-* [Gaussian Explosion](https://aras-p.info/blog/2023/12/08/Gaussian-explosion/) (2023 Dec 8)
 
 ## Performance numbers:
 
@@ -75,9 +73,9 @@ at "Medium" asset quality level (282MB asset file):
 
 * Windows (NVIDIA RTX 3080 Ti):
   * Official SBIR viewer: 7.4ms (135FPS). 4.8GB VRAM usage.
-  * Unity, DX12 or Vulkan: 6.8ms (147FPS) - 4.5ms rendering, 1.1ms sorting, 0.8ms splat view calc. 1.3GB VRAM usage.
+  * Unity, DX12 or Vulkan: 8.1ms (123FPS) - 4.55ms rendering, 2.37ms sorting, 0.78ms splat view calc. 1.3GB VRAM usage.
 * Mac (Apple M1 Max):
-  * Unity, Metal: 21.5ms (46FPS).
+  * Unity, Metal: 23.6ms (42FPS).
 
 Besides the gaussian splat asset that is loaded into GPU memory, currently this also needs about 48 bytes of GPU memory
 per splat (for sorting, caching view dependent data etc.).
@@ -88,7 +86,9 @@ per splat (for sorting, caching view dependent data etc.).
 The code I wrote for this is under MIT license. The project also uses several 3rd party libraries:
 
 - [zanders3/json](https://github.com/zanders3/json), MIT license, (c) 2018 Alex Parker.
-- "DeviceRadixSort" GPU sorting code contributed by Thomas Smith ([#82](https://github.com/aras-p/UnityGaussianSplatting/pull/82)).
+- "Ffx" GPU sorting code is based on
+  [AMD FidelityFX ParallelSort](https://github.com/GPUOpen-Effects/FidelityFX-ParallelSort), MIT license,
+  (c) 2020-2021 Advanced Micro Devices, Inc. Ported to Unity by me.
 
 However, keep in mind that the [license of the original paper implementation](https://github.com/graphdeco-inria/gaussian-splatting/blob/main/LICENSE.md)
 says that the official _training_ software for the Gaussian Splats is for educational / academic / non-commercial

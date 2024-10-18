@@ -7,19 +7,16 @@ using UnityEngine;
 
 namespace GaussianSplatting.Editor
 {
-    /* // not working correctly yet when the GS itself has scale
     [EditorTool("Gaussian Scale Tool", typeof(GaussianSplatRenderer), typeof(GaussianToolContext))]
     class GaussianScaleTool : GaussianTool
     {
         Vector3 m_CurrentScale = Vector3.one;
         Vector3 m_FrozenSelCenterLocal = Vector3.zero;
         bool m_FreezePivot = false;
-
         public override void OnActivated()
         {
             m_FreezePivot = false;
         }
-
         public override void OnToolGUI(EditorWindow window)
         {
             var gs = GetRenderer();
@@ -32,6 +29,7 @@ namespace GaussianSplatting.Editor
             if (evt.type == EventType.MouseDown)
             {
                 gs.EditStorePosMouseDown();
+                gs.EditStoreOtherMouseDown();
                 m_FrozenSelCenterLocal = selCenterLocal;
                 m_FreezePivot = true;
             }
@@ -64,5 +62,4 @@ namespace GaussianSplatting.Editor
             }
         }
     }
-    */
 }

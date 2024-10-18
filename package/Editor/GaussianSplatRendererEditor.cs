@@ -24,7 +24,6 @@ namespace GaussianSplatting.Editor
         SerializedProperty m_PropSplatScale;
         SerializedProperty m_PropOpacityScale;
         SerializedProperty m_PropSHOrder;
-        SerializedProperty m_PropSHOnly;
         SerializedProperty m_PropSortNthFrame;
         SerializedProperty m_PropRenderMode;
         SerializedProperty m_PropPointDisplaySize;
@@ -63,7 +62,6 @@ namespace GaussianSplatting.Editor
             m_PropSplatScale = serializedObject.FindProperty("m_SplatScale");
             m_PropOpacityScale = serializedObject.FindProperty("m_OpacityScale");
             m_PropSHOrder = serializedObject.FindProperty("m_SHOrder");
-            m_PropSHOnly = serializedObject.FindProperty("m_SHOnly");
             m_PropSortNthFrame = serializedObject.FindProperty("m_SortNthFrame");
             m_PropRenderMode = serializedObject.FindProperty("m_RenderMode");
             m_PropPointDisplaySize = serializedObject.FindProperty("m_PointDisplaySize");
@@ -106,7 +104,6 @@ namespace GaussianSplatting.Editor
             EditorGUILayout.PropertyField(m_PropSplatScale);
             EditorGUILayout.PropertyField(m_PropOpacityScale);
             EditorGUILayout.PropertyField(m_PropSHOrder);
-            EditorGUILayout.PropertyField(m_PropSHOnly);
             EditorGUILayout.PropertyField(m_PropSortNthFrame);
 
             EditorGUILayout.Space();
@@ -175,7 +172,7 @@ namespace GaussianSplatting.Editor
                 return;
             }
 
-            var targetGs = (GaussianSplatRenderer) target;
+            var targetGs = (GaussianSplatRenderer)target;
             if (!targetGs || !targetGs.HasValidAsset || !targetGs.isActiveAndEnabled)
             {
                 EditorGUILayout.HelpBox($"Can't merge into {target.name} (no asset or disable)", MessageType.Warning);
@@ -212,8 +209,8 @@ namespace GaussianSplatting.Editor
             CountTargetSplats(out var totalSplats, out _);
             if (totalSplats > GaussianSplatAsset.kMaxSplats)
                 return;
-            var targetGs = (GaussianSplatRenderer) target;
-
+            var targetGs = (GaussianSplatRenderer)target;
+            // targetGs which other selected splats will be merged into
             int copyDstOffset = targetGs.splatCount;
             targetGs.EditSetSplatCount(totalSplats);
             foreach (var obj in targets)
@@ -230,12 +227,13 @@ namespace GaussianSplatting.Editor
             Debug.Assert(copyDstOffset == totalSplats, $"Merge count mismatch, {copyDstOffset} vs {totalSplats}");
             Selection.activeObject = targetGs;
         }
-
         void EditGUI(GaussianSplatRenderer gs)
         {
             ++s_EditStatsUpdateCounter;
 
+            // draw separater
             DrawSeparator();
+
             bool wasToolActive = ToolManager.activeContextType == typeof(GaussianToolContext);
             GUILayout.BeginHorizontal();
             bool isToolActive = GUILayout.Toggle(wasToolActive, "Edit", EditorStyles.miniButton);
@@ -243,17 +241,17 @@ namespace GaussianSplatting.Editor
             {
                 if (GUILayout.Button("Reset", GUILayout.ExpandWidth(false)))
                 {
-                    if (EditorUtility.DisplayDialog("Reset Splat Modifications?",
+                    if (EditorUtility.DisplayDialog("Attention: Reset All Splat Modifications!!!",
                             $"This will reset edits of {gs.name} to match the {gs.asset.name} asset. Continue?",
-                            "Yes, reset", "Cancel"))
+                            "Yes", "Cancel"))
                     {
                         gs.enabled = false;
                         gs.enabled = true;
                     }
                 }
             }
-
             GUILayout.EndHorizontal();
+
             if (!wasToolActive && isToolActive)
             {
                 ToolManager.SetActiveContext<GaussianToolContext>();
@@ -307,7 +305,7 @@ namespace GaussianSplatting.Editor
             var asset = gs.asset;
             EditorGUILayout.Space();
             EditorGUI.BeginChangeCheck();
-            m_ExportBakeTransform = EditorGUILayout.Toggle("Export in world space", m_ExportBakeTransform);
+            m_ExportBakeTransform = EditorGUILayout.Toggle("Apply transform in world space", m_ExportBakeTransform);
             if (EditorGUI.EndChangeCheck())
             {
                 EditorPrefs.SetBool(kPrefExportBake, m_ExportBakeTransform);

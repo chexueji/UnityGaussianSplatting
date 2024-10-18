@@ -7,8 +7,8 @@ using UnityEngine;
 
 namespace GaussianSplatting.Editor
 {
-    /* not working correctly yet
-    [EditorTool("Gaussian Rotate Tool", typeof(GaussianSplatRenderer), typeof(GaussianToolContext))]
+    // not working correctly yet
+   [EditorTool("Gaussian Rotate Tool", typeof(GaussianSplatRenderer), typeof(GaussianToolContext))]
     class GaussianRotateTool : GaussianTool
     {
         Quaternion m_CurrentRotation = Quaternion.identity;
@@ -19,7 +19,6 @@ namespace GaussianSplatting.Editor
         {
             m_FreezePivot = false;
         }
-
         public override void OnToolGUI(EditorWindow window)
         {
             var gs = GetRenderer();
@@ -47,24 +46,25 @@ namespace GaussianSplatting.Editor
 
             EditorGUI.BeginChangeCheck();
             var selCenterWorld = tr.TransformPoint(selCenterLocal);
-            var newRotation = Handles.DoRotationHandle(m_CurrentRotation, selCenterWorld);
+            m_CurrentRotation = Handles.DoRotationHandle(m_CurrentRotation, selCenterWorld);
             if (EditorGUI.EndChangeCheck())
             {
                 Matrix4x4 localToWorld = gs.transform.localToWorldMatrix;
                 Matrix4x4 worldToLocal = gs.transform.worldToLocalMatrix;
                 var wasModified = gs.editModified;
-                var rotToApply = newRotation;
-                gs.EditRotateSelection(selCenterLocal, localToWorld, worldToLocal, rotToApply);
-                m_CurrentRotation = newRotation;
+                var rotToApply = m_CurrentRotation;
+                gs.EditRotateSelection(selCenterLocal, localToWorld, worldToLocal, rotToApply.normalized);
+
                 if (!wasModified)
                     GaussianSplatRendererEditor.RepaintAll();
+                evt.Use();
 
-                if(GUIUtility.hotControl == 0)
+                if (GUIUtility.hotControl == 0)
                 {
                     m_CurrentRotation = Tools.handleRotation;
                 }
             }
         }
     }
-    */
+
 }
